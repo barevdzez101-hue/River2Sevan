@@ -17,11 +17,13 @@ def run_flask():
   app.run(host="0.0.0.0", port=10000)
 
 
-# Լրացրեք ձեր Telegram տվյալները այստեղ
+# Ձեր Telegram Token-ը (Chat ID-ն այլևս պարտադիր չէ նախապես գրել)
 TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
-TELEGRAM_CHAT_ID = "8467592413"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+# Բոլոր այն օգտատերերի ID-ները, ովքեր կմտնեն բոտ (պահպանվում են ավտոմատ)
+active_chat_ids = set()
 
 # Տեղական ժամային գոտի (UTC+4 Հայաստանի ժամանակով)
 YEREVAN_TZ = timezone(timedelta(hours=4))
@@ -66,7 +68,6 @@ def update_data():
 
       now = time.time()
       history_data.append({"time": now, "data": dict(latest_data)})
-      # Պահպանում ենք միայն վերջին 1 ժամվա տվյալները
       history_data = [
           rec for rec in history_data if rec["time"] >= (now - 3600)
       ]
@@ -106,25 +107,38 @@ def get_start_markup():
   return markup
 
 
+# Ցանկացած օգտատեր, երբ գրում է /start կամ բացում է բոտը
+@bot.message_handler(commands=["start"])
+def send_welcome(message):
+  chat_id = message.chat.id
+  active_chat_ids.add(chat_id)
+  bot.send_message(
+      chat_id,
+      "👋 Բարև ձեզ։ Սա ջրի որակի մոնիտորինգի համակարգն է։\n🎛 Սեղմեք ստորև նշված"
+      " կոճակը՝ լայվ տվյալները տեսնելու համար:",
+      reply_markup=get_start_markup(),
+  )
+
+
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
   global is_streaming, is_paused_for_input, user_states
+  chat_id = call.message.chat.id
+  active_chat_ids.add(chat_id)
 
   if call.data == "start_live":
     is_streaming = True
     is_paused_for_input = False
     bot.answer_callback_query(call.id, "Լայվը միացվեց!")
     bot.send_message(
-        TELEGRAM_CHAT_ID,
-        "▶️ *Մոնիտորինգը սկսվեց...*",
-        parse_mode="Markdown",
+        chat_id, "▶️ *Մոնիտորինգը սկսվեց...*", parse_mode="Markdown"
     )
 
   elif call.data == "stop_live":
     is_streaming = False
     bot.answer_callback_query(call.id, "Լայվը կանգնեցվեց:")
     bot.send_message(
-        TELEGRAM_CHAT_ID,
+        chat_id,
         "⏹ *Կանգնեցված է։*",
         parse_mode="Markdown",
         reply_markup=get_start_markup(),
@@ -156,7 +170,7 @@ def handle_callbacks(call):
       analysis.append(f"❌ TDS-ը բարձր է ({tds} ppm):")
 
     report = "\n".join(analysis)
-    user_states[call.message.chat.id] = {"action": "pool_size_current", "data": d}
+    user_states[chat_id] = {"action": "pool_size_current", "data": d}
 
     msg = (
         f"📊 *Ընթացիկ Տվյալների Վերլուծություն*\n\n{report}\n\n"
@@ -164,7 +178,7 @@ def handle_callbacks(call):
         f"💧 *Խնդրում եմ գրեք ձեր լողավազանի մակերեսը (քառակուսի մետրով, օրինակ՝"
         f" 20):*"
     )
-    bot.send_message(TELEGRAM_CHAT_ID, msg, parse_mode="Markdown")
+    bot.send_message(chat_id, msg, parse_mode="Markdown")
 
   elif call.data == "analyze_history":
     is_paused_for_input = True
@@ -176,7 +190,6 @@ def handle_callbacks(call):
     if not recent_records:
       recent_records = [{"time": time.time(), "data": latest_data}]
 
-    # Հաշվում ենք բոլոր պարամետրերի միջին արժեքները
     avg_temp = sum(r["data"]["temp"] for r in recent_records) / len(
         recent_records
     )
@@ -212,7 +225,7 @@ def handle_callbacks(call):
         f"🔴 Միջին Կալիում (K)՝ `{avg_k:.2f} mg/L`\n\n"
         f"▶️ *Լայվ հեռարձակումը շարունակվում է...*"
     )
-    bot.send_message(TELEGRAM_CHAT_ID, msg, parse_mode="Markdown")
+    bot.send_message(chat_id, msg, parse_mode="Markdown")
     is_paused_for_input = False
 
 
@@ -220,6 +233,7 @@ def handle_callbacks(call):
 def handle_text_messages(message):
   global is_paused_for_input, user_states
   chat_id = message.chat.id
+  active_chat_ids.add(chat_id)
 
   if chat_id in user_states:
     state = user_states[chat_id]
@@ -279,9 +293,8 @@ def handle_text_messages(message):
 def live_stream_loop():
   global is_streaming, is_paused_for_input
   while True:
-    if is_streaming and not is_paused_for_input:
+    if is_streaming and not is_paused_for_input and active_chat_ids:
       d = latest_data
-      # Վերցնում ենք ճիշտ տեղական (Երևանի) ժամանակը
       time_str = datetime.now(YEREVAN_TZ).strftime("%H:%M:%S")
 
       text = (
@@ -297,15 +310,14 @@ def live_stream_loop():
           f"🔴 Կալիում (K): `{d.get('potassium')} mg/L`"
       )
 
-      try:
-        bot.send_message(
-            TELEGRAM_CHAT_ID,
-            text,
-            parse_mode="Markdown",
-            reply_markup=get_live_markup(),
-        )
-      except Exception as e:
-        print(f"Live stream error: {e}")
+      # Ուղարկում ենք տվյալները բոլոր այն օգտատերերին, ովքեր բացել են բոտը
+      for cid in list(active_chat_ids):
+        try:
+          bot.send_message(
+              cid, text, parse_mode="Markdown", reply_markup=get_live_markup()
+          )
+        except Exception:
+          pass  # Եթե ինչ-որ օգտատեր արգելափակել է բոտը, բաց ենք թողնում
 
     time.sleep(5)
 
@@ -314,14 +326,5 @@ if __name__ == "__main__":
   threading.Thread(target=run_flask, daemon=True).start()
   threading.Thread(target=live_stream_loop, daemon=True).start()
 
-  print("Telegram բոտը և սերվերը պատրաստ են...")
-  try:
-    bot.send_message(
-        TELEGRAM_CHAT_ID,
-        "🎛 Սեղմեք կոճակը լայվ մոնիտորինգը սկսելու համար:",
-        reply_markup=get_start_markup(),
-    )
-  except Exception:
-    pass
-
+  print("Telegram բոտը և սերվերը աշխատում են բոլոր օգտատերերի համար...")
   bot.infinity_polling(skip_pending=True)
