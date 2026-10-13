@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import threading
 import time
 from flask import Flask, jsonify, request
@@ -17,13 +17,15 @@ def run_flask():
   app.run(host="0.0.0.0", port=10000)
 
 
-# Telegram կարգավորումներ
+# Լրացրեք ձեր Telegram տվյալները այստեղ
 TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
 TELEGRAM_CHAT_ID = "8467592413"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# Պահպանում ենք ESP32-ից ստացված վերջին տվյալները
+# Տեղական ժամային գոտի (UTC+4 Հայաստանի ժամանակով)
+YEREVAN_TZ = timezone(timedelta(hours=4))
+
 latest_data = {
     "temp": 0.0,
     "ph": 0.0,
@@ -41,7 +43,6 @@ is_paused_for_input = False
 user_states = {}
 
 
-# ESP32-ն ուղարկում է տվյալները այս հասցեին POST հարցումով
 @app.route("/update-data", methods=["POST"])
 def update_data():
   global latest_data, history_data
@@ -65,6 +66,7 @@ def update_data():
 
       now = time.time()
       history_data.append({"time": now, "data": dict(latest_data)})
+      # Պահպանում ենք միայն վերջին 1 ժամվա տվյալները
       history_data = [
           rec for rec in history_data if rec["time"] >= (now - 3600)
       ]
@@ -79,13 +81,13 @@ def get_live_markup():
   markup = InlineKeyboardMarkup()
   markup.add(
       InlineKeyboardButton(
-          "📊 Լայվ տվյալների վերլուծություն և խորհուրդ",
-          callback_data="analyze_current",
+          "📊 Ընթացիկ վերլուծություն և խորհուրդ", callback_data="analyze_current"
       )
   )
   markup.add(
       InlineKeyboardButton(
-          "📈 1 ժամվա պատմության վերլուծություն", callback_data="analyze_history"
+          "📈 1 ժամվա բոլոր տվյալների վերլուծություն",
+          callback_data="analyze_history",
       )
   )
   markup.add(
@@ -111,10 +113,10 @@ def handle_callbacks(call):
   if call.data == "start_live":
     is_streaming = True
     is_paused_for_input = False
-    bot.answer_callback_query(call.id, "Լայվ ցուցադրումը միացվեց!")
+    bot.answer_callback_query(call.id, "Լայվը միացվեց!")
     bot.send_message(
         TELEGRAM_CHAT_ID,
-        "▶️ *Լայվ մոնիտորինգը սկսվեց...*",
+        "▶️ *Մոնիտորինգը սկսվեց...*",
         parse_mode="Markdown",
     )
 
@@ -123,7 +125,7 @@ def handle_callbacks(call):
     bot.answer_callback_query(call.id, "Լայվը կանգնեցվեց:")
     bot.send_message(
         TELEGRAM_CHAT_ID,
-        "⏹ *Լայվ հեռարձակումը կանգնեցված է։*",
+        "⏹ *Կանգնեցված է։*",
         parse_mode="Markdown",
         reply_markup=get_start_markup(),
     )
@@ -158,7 +160,7 @@ def handle_callbacks(call):
 
     msg = (
         f"📊 *Ընթացիկ Տվյալների Վերլուծություն*\n\n{report}\n\n"
-        f"⏸ *Լայվը դադարեցված է սպասման ռեժիմում։*\n"
+        f"⏸ *Լայվը կանգնեցված է սպասման ռեժիմում։*\n"
         f"💧 *Խնդրում եմ գրեք ձեր լողավազանի մակերեսը (քառակուսի մետրով, օրինակ՝"
         f" 20):*"
     )
@@ -166,7 +168,7 @@ def handle_callbacks(call):
 
   elif call.data == "analyze_history":
     is_paused_for_input = True
-    bot.answer_callback_query(call.id, "Վերլուծվում են պատմության տվյալները...")
+    bot.answer_callback_query(call.id, "Հաշվարկվում են 1 ժամվա տվյալները...")
 
     recent_records = [
         rec for rec in history_data if rec["time"] >= (time.time() - 3600)
@@ -174,22 +176,46 @@ def handle_callbacks(call):
     if not recent_records:
       recent_records = [{"time": time.time(), "data": latest_data}]
 
-    temps = [r["data"]["temp"] for r in recent_records]
-    phs = [r["data"]["ph"] for r in recent_records]
-    avg_temp = sum(temps) / len(temps)
-    avg_ph = sum(phs) / len(phs)
+    # Հաշվում ենք բոլոր պարամետրերի միջին արժեքները
+    avg_temp = sum(r["data"]["temp"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_ph = sum(r["data"]["ph"] for r in recent_records) / len(recent_records)
+    avg_do = sum(r["data"]["do"] for r in recent_records) / len(recent_records)
+    avg_ec = sum(r["data"]["ec"] for r in recent_records) / len(recent_records)
+    avg_tds = sum(r["data"]["tds"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_n = sum(r["data"]["nitrogen"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_p = sum(r["data"]["phosphorus"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_k = sum(r["data"]["potassium"] for r in recent_records) / len(
+        recent_records
+    )
 
-    now_str = datetime.now().strftime("%d.%m.%Y - %H:%M:%S")
+    now_str = datetime.now(YEREVAN_TZ).strftime("%d.%m.%Y - %H:%M:%S")
+
     msg = (
-        f"📈 *1 Ժամվա Պատմության Վերլուծություն*\n\n📅 Ժամ՝ `{now_str}`\n• Միջին"
-        f" ջերմաստիճան՝ `{avg_temp:.1f}°C`\n• Միջին pH-ը՝ `{avg_ph:.2f}`\n\n▶️"
-        f" *Լայվ հեռարձակումը վերսկսվում է...*"
+        f"📈 *1 Ժամվա Բոլոր Տվյալների Վերլուծություն*\n"
+        f"🕒 Ժամ՝ `{now_str}`\n"
+        f"📊 Չափումների քանակը՝ `{len(recent_records)}` հատ\n\n"
+        f"🌡 Միջին ջերմաստիճան՝ `{avg_temp:.1f} °C`\n"
+        f"🧪 Միջին pH՝ `{avg_ph:.2f}`\n"
+        f"💨 Միջին Թթվածին (DO)՝ `{avg_do:.2f} mg/L`\n"
+        f"⚡ Միջին EC՝ `{avg_ec:.2f} uS/cm`\n"
+        f"🧂 Միջին TDS՝ `{avg_tds:.2f} ppm`\n"
+        f"🟢 Միջին Ազոտ (N)՝ `{avg_n:.2f} mg/L`\n"
+        f"🟣 Միջին Ֆոսֆոր (P)՝ `{avg_p:.3f} mg/L`\n"
+        f"🔴 Միջին Կալիում (K)՝ `{avg_k:.2f} mg/L`\n\n"
+        f"▶️ *Լայվ հեռարձակումը շարունակվում է...*"
     )
     bot.send_message(TELEGRAM_CHAT_ID, msg, parse_mode="Markdown")
     is_paused_for_input = False
 
 
-# Հաղորդագրությունների մշակում (լողավազանի մակերեսի ստացման համար)
 @bot.message_handler(func=lambda message: True)
 def handle_text_messages(message):
   global is_paused_for_input, user_states
@@ -255,7 +281,8 @@ def live_stream_loop():
   while True:
     if is_streaming and not is_paused_for_input:
       d = latest_data
-      time_str = datetime.now().strftime("%H:%M:%S")
+      # Վերցնում ենք ճիշտ տեղական (Երևանի) ժամանակը
+      time_str = datetime.now(YEREVAN_TZ).strftime("%H:%M:%S")
 
       text = (
           f"🌊 *Ջրի Որակի Լայվ Մոնիտորինգ*\n"
