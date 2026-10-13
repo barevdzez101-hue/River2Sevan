@@ -23,8 +23,8 @@ def run_flask():
 TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
 TELEGRAM_CHAT_ID = "8467592413"
 
-# ESP32-ի IP հասցեն
-ESP32_URL = "http://10.115.2.12/data"
+# ESP32-ի նոր IP հասցեն
+ESP32_URL = "http://192.168.1.3/data"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
