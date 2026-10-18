@@ -8,7 +8,11 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import telebot
-from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+from telebot.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+)
 
 app = Flask(__name__)
 
@@ -94,7 +98,7 @@ def get_live_markup():
   )
   markup.add(
       InlineKeyboardButton(
-          "📉 Ուղարկել բոլոր գրաֆիկները", callback_data="send_all_charts"
+          "📉 Ուղարկել բոլոր գրաֆիկները (Ալբոմով)", callback_data="send_all_charts"
       )
   )
   markup.add(
@@ -158,8 +162,8 @@ def generate_single_chart(param_key, param_title, unit, color):
   return buf
 
 
-def send_all_sensor_charts(chat_id):
-  """Ուղարկում է բոլոր 8 չափումների առանձին գրաֆիկները"""
+def send_all_sensor_charts_as_album(chat_id):
+  """Ուղարկում է բոլոր 8 չափումների առանձին գրաֆիկները ՄԵԿ ՀԱՂՈՐԴԱԳՐՈՒԹՅԱՄԲ (Ալբոմով)"""
   charts_config = [
       ("temp", "🌡 Ջերմաստիճան", "°C", "tab:red"),
       ("ph", "🧪 pH Արժեք", "pH", "tab:blue"),
@@ -171,17 +175,22 @@ def send_all_sensor_charts(chat_id):
       ("potassium", "🔴 Կալիում (K)", "mg/L", "brown"),
   ]
 
-  for key, title, unit, color in charts_config:
+  media_group = []
+  for idx, (key, title, unit, color) in enumerate(charts_config):
     photo_buf = generate_single_chart(key, title, unit, color)
-    try:
-      bot.send_photo(
-          chat_id,
-          photo=photo_buf,
-          caption=f"📈 *{title}-ի 1 Ժամվա Գրաֆիկ*",
-          parse_mode="Markdown",
-      )
-    except Exception as e:
-      print(f"Error sending chart {key}: {e}")
+    caption = (
+        f"📈 *Ջրի Որակի Բոլոր Գրաֆիկները (1 Ժամ)*" if idx == 0 else ""
+    )  # Առաջին նկարին տալիս ենք վերնագիր
+    media_group.append(
+        InputMediaPhoto(
+            photo_buf, caption=caption, parse_mode="Markdown" if caption else None
+        )
+    )
+
+  try:
+    bot.send_media_group(chat_id, media=media_group)
+  except Exception as e:
+    print(f"Error sending media group: {e}")
 
 
 @bot.message_handler(commands=["start"])
@@ -232,11 +241,13 @@ def handle_callbacks(call):
     )
 
   elif call.data == "send_all_charts":
-    bot.answer_callback_query(call.id, "Գեներացվում են բոլոր գրաֆիկները...")
-    send_all_sensor_charts(chat_id)
+    bot.answer_callback_query(
+        call.id, "Գեներացվում են բոլոր գրաֆիկները մեկ հաղորդագրությամբ..."
+    )
+    send_all_sensor_charts_as_album(chat_id)
     bot.send_message(
         chat_id,
-        "✅ *Բոլոր առանձին գրաֆիկները հաջողությամբ ուղարկվեցին։*",
+        "✅ *Բոլոր 8 առանձին գրաֆիկները ուղարկվեցին մեկ ալբոմով։*",
         parse_mode="Markdown",
         reply_markup=get_live_markup(),
     )
@@ -415,7 +426,7 @@ def live_stream_loop():
 
     if is_chart_streaming and active_chat_ids:
       for cid in list(active_chat_ids):
-        send_all_sensor_charts(cid)
+        send_all_sensor_charts_as_album(cid)
 
     time.sleep(15)
 
