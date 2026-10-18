@@ -19,7 +19,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-  return "Bot is running 24/7 with high quality performance!"
+  return "Bot is running 24/7 with timestamps on charts!"
 
 
 def run_flask():
@@ -102,7 +102,6 @@ def get_live_markup():
       )
   )
 
-  # Եթե գրաֆիկների լայվն է աշխատում, տալիս ենք ԿԱՆԳՆԵՑՆԵԼՈՒ կոճակը
   if is_chart_streaming:
     markup.add(
         InlineKeyboardButton(
@@ -116,7 +115,6 @@ def get_live_markup():
         )
     )
 
-  # Եթե տեքստային լայվը ԱԿՏԻՎ ՉԷ, նոր ցույց ենք տալիս ՄԻԱՑՆԵԼՈՒ կոճակը
   if not is_streaming:
     markup.add(
         InlineKeyboardButton(
@@ -154,7 +152,6 @@ def get_start_markup():
 
 
 def get_chart_live_stop_markup():
-  """Առանձին կոճակ գրաֆիկների ալբոմի տակ ցույց տալու համար"""
   markup = InlineKeyboardMarkup()
   markup.add(
       InlineKeyboardButton(
@@ -165,7 +162,7 @@ def get_chart_live_stop_markup():
 
 
 def generate_single_chart(param_key, param_title, unit, color):
-  """Գեներացնում է բարձր որակի առանձին գրաֆիկ"""
+  """Գեներացնում է բարձր որակի առանձին գրաֆիկ՝ նկարի վրա տարին, ամիսը, օրը և ժամը նշված"""
   if not history_data:
     times = [datetime.now(YEREVAN_TZ)]
     vals = [latest_data.get(param_key, 0.0)]
@@ -175,7 +172,10 @@ def generate_single_chart(param_key, param_title, unit, color):
     ]
     vals = [r["data"].get(param_key, 0.0) for r in history_data]
 
-  fig, ax = plt.subplots(figsize=(8, 4), dpi=150)
+  # Ստանում ենք ընթացիկ հայկական ժամանակը (Տարի-Ամիս-Օր Ժամ:Րոպե:Վայրկյան)
+  current_time_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+  fig, ax = plt.subplots(figsize=(8, 4.2), dpi=150)
   ax.plot(
       times,
       vals,
@@ -185,14 +185,16 @@ def generate_single_chart(param_key, param_title, unit, color):
       linewidth=2,
       label=f"{param_title} ({unit})",
   )
-  ax.set_xlabel("Ժամանակ", fontsize=10, fontweight="bold")
+  ax.set_xlabel("Ժամանակ (հետհաշվարկ)", fontsize=9, fontweight="bold")
   ax.set_ylabel(f"{param_title} ({unit})", fontsize=10, fontweight="bold")
   ax.grid(True, linestyle="--", alpha=0.5)
+
+  # Վերնագիր + Ժամանակը նկարի վրա
   plt.title(
-      f"{param_title}-ի Փոփոխության Գրաֆիկ",
-      fontsize=12,
+      f"{param_title}-ի Փոփոխության Գրաֆիկ\n📅 Թարմացված է՝ {current_time_str}",
+      fontsize=11,
       fontweight="bold",
-      pad=10,
+      pad=12,
   )
   fig.tight_layout()
 
@@ -220,7 +222,7 @@ def send_all_sensor_charts_as_album(chat_id):
   for idx, (key, title, unit, color) in enumerate(charts_config):
     photo_buf = generate_single_chart(key, title, unit, color)
     caption = (
-        f"📈 *Ջրի Որակի Բոլոր Գրաֆիկները (1 Ժամ)*" if idx == 0 else ""
+        f"📈 *Ջրի Որակի Բոլոր Գրաֆիկները և Ժամանակը*" if idx == 0 else ""
     )
     media_group.append(
         InputMediaPhoto(
@@ -254,7 +256,7 @@ def handle_callbacks(call):
 
   if call.data == "start_live":
     is_streaming = True
-    is_chart_streaming = False  # Անջատում ենք գրաֆիկների լայվը
+    is_chart_streaming = False
     is_paused_for_input = False
     bot.answer_callback_query(call.id, "Տեքստային լայվը միացվեց!")
     bot.send_message(
@@ -263,7 +265,7 @@ def handle_callbacks(call):
 
   elif call.data == "start_chart_live":
     is_chart_streaming = True
-    is_streaming = False  # Անջատում ենք տեքստային լայվը
+    is_streaming = False
     is_paused_for_input = False
     bot.answer_callback_query(call.id, "Գրաֆիկների լայվը միացվեց!")
     bot.send_message(
@@ -285,7 +287,7 @@ def handle_callbacks(call):
 
   elif call.data == "send_all_charts":
     bot.answer_callback_query(
-        call.id, "Գեներացվում են բարձր որակի գրաֆիկները..."
+        call.id, "Գեներացվում են բարձր որակի գրաֆիկները ժամանակագրությամբ..."
     )
     send_all_sensor_charts_as_album(chat_id)
     bot.send_message(
@@ -359,7 +361,7 @@ def handle_callbacks(call):
         recent_records
     )
 
-    now_str = datetime.now(YEREVAN_TZ).strftime("%d.%m.%Y - %H:%M:%S")
+    now_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d - %H:%M:%S")
 
     msg = (
         f"📈 *1 Ժամվա Բոլոր Տվյալների Վերլուծություն*\n"
@@ -450,22 +452,22 @@ def live_stream_loop():
         try:
           bot.send_message(
               cid,
-              "📈 *Լայվ գրաֆիկները թարմացվեցին:*",
+              "📈 *Լայվ գրաֆիկները թարմացվեցին ըստ ժամանակի:*",
               parse_mode="Markdown",
               reply_markup=get_chart_live_stop_markup(),
           )
         except Exception:
           pass
-      time.sleep(15)  # Թարմացում 15 վայրկյանը մեկ
+      time.sleep(15)
       continue
 
-    # 2. ՏԵՔՍՏԱՅԻՆ ԼԱՅՎ (Ուղարկվում է միայն եթե գրաֆիկների լայվը անջատված է)
+    # 2. ՏԵՔՍՏԱՅԻՆ ԼԱՅՎ
     if is_streaming and not is_paused_for_input and active_chat_ids:
       d = latest_data
-      time_str = datetime.now(YEREVAN_TZ).strftime("%H:%M:%S")
+      time_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
       text = (
           f"🌊 *Ջրի Որակի Լայվ Մոնիտորինգ*\n"
-          f"🕒 Ժամ: `{time_str}`\n\n"
+          f"🕒 Ժամանակ: `{time_str}`\n\n"
           f"🌡 Ջերմաստիճան: `{d.get('temp')} °C`\n"
           f"🧪 pH արժեք: `{d.get('ph')}`\n"
           f"💨 Թթվածին (DO): `{d.get('do')} mg/L`\n"
@@ -482,7 +484,7 @@ def live_stream_loop():
           )
         except Exception:
           pass
-      time.sleep(5)  # Թարմացում 5 վայրկյանը մեկ
+      time.sleep(5)
     else:
       time.sleep(2)
 
