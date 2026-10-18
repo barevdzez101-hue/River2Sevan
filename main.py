@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta, timezone
+import io
 import threading
 import time
 from flask import Flask, jsonify, request
+import matplotlib
+matplotlib.use('Agg')  # Անհրաժեշտ է սերվերում նկարներ ստեղծելու համար առանց GUI-ի
+import matplotlib.pyplot as plt
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -17,15 +21,10 @@ def run_flask():
   app.run(host="0.0.0.0", port=10000)
 
 
-# Ձեր Telegram Token-ը (Chat ID-ն այլևս պարտադիր չէ նախապես գրել)
 TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
-
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# Բոլոր այն օգտատերերի ID-ները, ովքեր կմտնեն բոտ (պահպանվում են ավտոմատ)
 active_chat_ids = set()
-
-# Տեղական ժամային գոտի (UTC+4 Հայաստանի ժամանակով)
 YEREVAN_TZ = timezone(timedelta(hours=4))
 
 latest_data = {
@@ -41,6 +40,7 @@ latest_data = {
 
 history_data = []
 is_streaming = False
+is_chart_streaming = False
 is_paused_for_input = False
 user_states = {}
 
@@ -92,7 +92,19 @@ def get_live_markup():
       )
   )
   markup.add(
-      InlineKeyboardButton("⏹ Կանգնեցնել լայվը", callback_data="stop_live")
+      InlineKeyboardButton(
+          "📉 Ուղարկել ջերմ/pH գրաֆիկը", callback_data="send_chart"
+      )
+  )
+  markup.add(
+      InlineKeyboardButton(
+          "🔄 Միացնել գրաֆիկի լայվը", callback_data="start_chart_live"
+      )
+  )
+  markup.add(
+      InlineKeyboardButton(
+          "⏹ Կանգնեցնել բոլոր լայվերը", callback_data="stop_live"
+      )
   )
   return markup
 
@@ -104,10 +116,50 @@ def get_start_markup():
           "▶️ Սկսել լայվ տվյալների ցուցադրումը", callback_data="start_live"
       )
   )
+  markup.add(
+      InlineKeyboardButton(
+          "📉 Ստանալ վիճակագրական գրաֆիկ", callback_data="send_chart"
+      )
+  )
   return markup
 
 
-# Ցանկացած օգտատեր, երբ գրում է /start կամ բացում է բոտը
+def generate_chart_image():
+  """Ստեղծում է ժամանակային գրաֆիկ պատկերի տեսքով"""
+  if not history_data:
+    # Եթե պատմությունը դատարկ է, նկարում ենք ընթացիկը
+    times = [datetime.now(YEREVAN_TZ)]
+    temps = [latest_data["temp"]]
+    phs = [latest_data["ph"]]
+  else:
+    times = [
+        datetime.fromtimestamp(r["time"], YEREVAN_TZ) for r in history_data
+    ]
+    temps = [r["data"]["temp"] for r in history_data]
+    phs = [r["data"]["ph"] for r in history_data]
+
+  fig, ax1 = plt.subplots(figsize=(8, 4))
+
+  ax1.set_xlabel("Ժամանակ", fontsize=10)
+  ax1.set_ylabel("Ջերմաստիճան (°C)", color="tab:red", fontsize=10)
+  ax1.plot(times, temps, color="tab:red", marker="o", label="Ջերմաստիճան (°C)")
+  ax1.tick_params(axis="y", labelcolor="tab:red")
+
+  ax2 = ax1.twinx()
+  ax2.set_ylabel("pH Արժեք", color="tab:blue", fontsize=10)
+  ax2.plot(times, phs, color="tab:blue", marker="s", label="pH Արժեք")
+  ax2.tick_params(axis="y", labelcolor="tab:blue")
+
+  plt.title("Ջրի Որակի 1 Ժամվա Գրաֆիկ", fontsize=12, fontweight="bold")
+  fig.tight_layout()
+
+  buf = io.BytesIO()
+  plt.savefig(buf, format="png", dpi=100)
+  buf.seek(0)
+  plt.close(fig)
+  return buf
+
+
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
   chat_id = message.chat.id
@@ -115,33 +167,55 @@ def send_welcome(message):
   bot.send_message(
       chat_id,
       "👋 Բարև ձեզ։ Սա ջրի որակի մոնիտորինգի համակարգն է։\n🎛 Սեղմեք ստորև նշված"
-      " կոճակը՝ լայվ տվյալները տեսնելու համար:",
+      " կոճակը՝ լայվ տվյալները կամ գրաֆիկները տեսնելու համար:",
       reply_markup=get_start_markup(),
   )
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
-  global is_streaming, is_paused_for_input, user_states
+  global is_streaming, is_chart_streaming, is_paused_for_input, user_states
   chat_id = call.message.chat.id
   active_chat_ids.add(chat_id)
 
   if call.data == "start_live":
     is_streaming = True
     is_paused_for_input = False
-    bot.answer_callback_query(call.id, "Լայվը միացվեց!")
+    bot.answer_callback_query(call.id, "Տեքստային լայվը միացվեց!")
     bot.send_message(
-        chat_id, "▶️ *Մոնիտորինգը սկսվեց...*", parse_mode="Markdown"
+        chat_id, "▶️ *Տեքստային մոնիտորինգը սկսվեց...*", parse_mode="Markdown"
+    )
+
+  elif call.data == "start_chart_live":
+    is_chart_streaming = True
+    bot.answer_callback_query(call.id, "Գրաֆիկների լայվը միացվեց!")
+    bot.send_message(
+        chat_id,
+        "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց... (կթարմացվի"
+        " պարբերաբար)*",
+        parse_mode="Markdown",
     )
 
   elif call.data == "stop_live":
     is_streaming = False
-    bot.answer_callback_query(call.id, "Լայվը կանգնեցվեց:")
+    is_chart_streaming = False
+    bot.answer_callback_query(call.id, "Բոլոր լայվերը կանգնեցվեցին:")
     bot.send_message(
         chat_id,
-        "⏹ *Կանգնեցված է։*",
+        "⏹ *Բոլոր հեռարձակումները կանգնեցված են։*",
         parse_mode="Markdown",
         reply_markup=get_start_markup(),
+    )
+
+  elif call.data == "send_chart":
+    bot.answer_callback_query(call.id, "Գեներացվում է գրաֆիկը...")
+    photo_buffer = generate_chart_image()
+    bot.send_photo(
+        chat_id,
+        photo=photo_buffer,
+        caption="📈 *Վերջին 1 ժամվա վիճակագրական գրաֆիկ*",
+        parse_mode="Markdown",
+        reply_markup=get_live_markup(),
     )
 
   elif call.data == "analyze_current":
@@ -174,7 +248,7 @@ def handle_callbacks(call):
 
     msg = (
         f"📊 *Ընթացիկ Տվյալների Վերլուծություն*\n\n{report}\n\n"
-        f"⏸ *Լայվը կանգնեցված է սպասման ռեժիմում։*\n"
+        f"⏸ *Լայվը դադարեցված է սպասման ռեժիմում։*\n"
         f"💧 *Խնդրում եմ գրեք ձեր լողավազանի մակերեսը (քառակուսի մետրով, օրինակ՝"
         f" 20):*"
     )
@@ -182,7 +256,7 @@ def handle_callbacks(call):
 
   elif call.data == "analyze_history":
     is_paused_for_input = True
-    bot.answer_callback_query(call.id, "Հաշվարկվում են 1 ժամվա տվյալները...")
+    bot.answer_callback_query(call.id, "Հաշվարկվում են բոլոր տվյալները...")
 
     recent_records = [
         rec for rec in history_data if rec["time"] >= (time.time() - 3600)
@@ -285,18 +359,18 @@ def handle_text_messages(message):
   else:
     bot.send_message(
         chat_id,
-        "🎛 Սեղմեք ստորև նշված կոճակը՝ լայվը սկսելու համար:",
+        "🎛 Սեղմեք ստորև նշված կոճակը՝ հեռարձակումը կամ գրաֆիկը բացելու համար:",
         reply_markup=get_start_markup(),
     )
 
 
 def live_stream_loop():
-  global is_streaming, is_paused_for_input
+  global is_streaming, is_chart_streaming, is_paused_for_input
   while True:
+    # 1. Տեքստային լայվ հեռարձակում
     if is_streaming and not is_paused_for_input and active_chat_ids:
       d = latest_data
       time_str = datetime.now(YEREVAN_TZ).strftime("%H:%M:%S")
-
       text = (
           f"🌊 *Ջրի Որակի Լայվ Մոնիտորինգ*\n"
           f"🕒 Ժամ: `{time_str}`\n\n"
@@ -309,22 +383,35 @@ def live_stream_loop():
           f"🟣 Ֆոսֆոր (P): `{d.get('phosphorus')} mg/L`\n"
           f"🔴 Կալիում (K): `{d.get('potassium')} mg/L`"
       )
-
-      # Ուղարկում ենք տվյալները բոլոր այն օգտատերերին, ովքեր բացել են բոտը
       for cid in list(active_chat_ids):
         try:
           bot.send_message(
               cid, text, parse_mode="Markdown", reply_markup=get_live_markup()
           )
         except Exception:
-          pass  # Եթե ինչ-որ օգտատեր արգելափակել է բոտը, բաց ենք թողնում
+          pass
 
-    time.sleep(5)
+    # 2. Գրաֆիկների լայվ հեռարձակում
+    if is_chart_streaming and active_chat_ids:
+      photo_buf = generate_chart_image()
+      for cid in list(active_chat_ids):
+        try:
+          bot.send_photo(
+              cid,
+              photo=photo_buf,
+              caption="📈 *Լայվ թարմացվող գրաֆիկ*",
+              parse_mode="Markdown",
+              reply_markup=get_live_markup(),
+          )
+        except Exception:
+          pass
+
+    time.sleep(10)  # Թարմացման հաճախականությունը
 
 
 if __name__ == "__main__":
   threading.Thread(target=run_flask, daemon=True).start()
   threading.Thread(target=live_stream_loop, daemon=True).start()
 
-  print("Telegram բոտը և սերվերը աշխատում են բոլոր օգտատերերի համար...")
+  print("Telegram բոտը և սերվերը աշխատում են գրաֆիկների աջակցությամբ...")
   bot.infinity_polling(skip_pending=True)
