@@ -4,7 +4,8 @@ import threading
 import time
 from flask import Flask, jsonify, request
 import matplotlib
-matplotlib.use('Agg')  # Անհրաժեշտ է սերվերում նկարներ ստեղծելու համար առանց GUI-ի
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -93,12 +94,12 @@ def get_live_markup():
   )
   markup.add(
       InlineKeyboardButton(
-          "📉 Ուղարկել ջերմ/pH գրաֆիկը", callback_data="send_chart"
+          "📉 Ուղարկել բոլոր գրաֆիկները", callback_data="send_all_charts"
       )
   )
   markup.add(
       InlineKeyboardButton(
-          "🔄 Միացնել գրաֆիկի լայվը", callback_data="start_chart_live"
+          "🔄 Միացնել գրաֆիկների լայվը", callback_data="start_chart_live"
       )
   )
   markup.add(
@@ -118,39 +119,36 @@ def get_start_markup():
   )
   markup.add(
       InlineKeyboardButton(
-          "📉 Ստանալ վիճակագրական գրաֆիկ", callback_data="send_chart"
+          "📉 Ստանալ բոլոր գրաֆիկները", callback_data="send_all_charts"
       )
   )
   return markup
 
 
-def generate_chart_image():
-  """Ստեղծում է ժամանակային գրաֆիկ պատկերի տեսքով"""
+def generate_single_chart(param_key, param_title, unit, color):
+  """Ստեղծում է մեկ կոնկրետ չափման առանձին գրաֆիկ"""
   if not history_data:
-    # Եթե պատմությունը դատարկ է, նկարում ենք ընթացիկը
     times = [datetime.now(YEREVAN_TZ)]
-    temps = [latest_data["temp"]]
-    phs = [latest_data["ph"]]
+    vals = [latest_data.get(param_key, 0.0)]
   else:
     times = [
         datetime.fromtimestamp(r["time"], YEREVAN_TZ) for r in history_data
     ]
-    temps = [r["data"]["temp"] for r in history_data]
-    phs = [r["data"]["ph"] for r in history_data]
+    vals = [r["data"].get(param_key, 0.0) for r in history_data]
 
-  fig, ax1 = plt.subplots(figsize=(8, 4))
-
-  ax1.set_xlabel("Ժամանակ", fontsize=10)
-  ax1.set_ylabel("Ջերմաստիճան (°C)", color="tab:red", fontsize=10)
-  ax1.plot(times, temps, color="tab:red", marker="o", label="Ջերմաստիճան (°C)")
-  ax1.tick_params(axis="y", labelcolor="tab:red")
-
-  ax2 = ax1.twinx()
-  ax2.set_ylabel("pH Արժեք", color="tab:blue", fontsize=10)
-  ax2.plot(times, phs, color="tab:blue", marker="s", label="pH Արժեք")
-  ax2.tick_params(axis="y", labelcolor="tab:blue")
-
-  plt.title("Ջրի Որակի 1 Ժամվա Գրաֆիկ", fontsize=12, fontweight="bold")
+  fig, ax = plt.subplots(figsize=(7, 3.5))
+  ax.plot(
+      times,
+      vals,
+      color=color,
+      marker="o",
+      linewidth=2,
+      label=f"{param_title} ({unit})",
+  )
+  ax.set_xlabel("Ժամանակ", fontsize=9)
+  ax.set_ylabel(f"{param_title} ({unit})", fontsize=9)
+  ax.grid(True, linestyle="--", alpha=0.6)
+  plt.title(f"{param_title}-ի Փոփոխության Գրաֆիկ", fontsize=11, fontweight="bold")
   fig.tight_layout()
 
   buf = io.BytesIO()
@@ -160,6 +158,32 @@ def generate_chart_image():
   return buf
 
 
+def send_all_sensor_charts(chat_id):
+  """Ուղարկում է բոլոր 8 չափումների առանձին գրաֆիկները"""
+  charts_config = [
+      ("temp", "🌡 Ջերմաստիճան", "°C", "tab:red"),
+      ("ph", "🧪 pH Արժեք", "pH", "tab:blue"),
+      ("do", "💨 Թթվածին (DO)", "mg/L", "tab:cyan"),
+      ("ec", "⚡ Էլեկտրահաղորդականություն (EC)", "uS/cm", "tab:purple"),
+      ("tds", "🧂 Չալուծված Աղեր (TDS)", "ppm", "tab:orange"),
+      ("nitrogen", "🟢 Ազոտ (N)", "mg/L", "tab:green"),
+      ("phosphorus", "🟣 Ֆոսֆոր (P)", "mg/L", "magenta"),
+      ("potassium", "🔴 Կալիում (K)", "mg/L", "brown"),
+  ]
+
+  for key, title, unit, color in charts_config:
+    photo_buf = generate_single_chart(key, title, unit, color)
+    try:
+      bot.send_photo(
+          chat_id,
+          photo=photo_buf,
+          caption=f"📈 *{title}-ի 1 Ժամվա Գրաֆիկ*",
+          parse_mode="Markdown",
+      )
+    except Exception as e:
+      print(f"Error sending chart {key}: {e}")
+
+
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
   chat_id = message.chat.id
@@ -167,7 +191,7 @@ def send_welcome(message):
   bot.send_message(
       chat_id,
       "👋 Բարև ձեզ։ Սա ջրի որակի մոնիտորինգի համակարգն է։\n🎛 Սեղմեք ստորև նշված"
-      " կոճակը՝ լայվ տվյալները կամ գրաֆիկները տեսնելու համար:",
+      " կոճակը՝ տվյալները կամ առանձին գրաֆիկները տեսնելու համար:",
       reply_markup=get_start_markup(),
   )
 
@@ -191,7 +215,7 @@ def handle_callbacks(call):
     bot.answer_callback_query(call.id, "Գրաֆիկների լայվը միացվեց!")
     bot.send_message(
         chat_id,
-        "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց... (կթարմացվի"
+        "📈 *Բոլոր գրաֆիկների լայվ հեռարձակումը սկսվեց... (կթարմացվեն"
         " պարբերաբար)*",
         parse_mode="Markdown",
     )
@@ -207,13 +231,12 @@ def handle_callbacks(call):
         reply_markup=get_start_markup(),
     )
 
-  elif call.data == "send_chart":
-    bot.answer_callback_query(call.id, "Գեներացվում է գրաֆիկը...")
-    photo_buffer = generate_chart_image()
-    bot.send_photo(
+  elif call.data == "send_all_charts":
+    bot.answer_callback_query(call.id, "Գեներացվում են բոլոր գրաֆիկները...")
+    send_all_sensor_charts(chat_id)
+    bot.send_message(
         chat_id,
-        photo=photo_buffer,
-        caption="📈 *Վերջին 1 ժամվա վիճակագրական գրաֆիկ*",
+        "✅ *Բոլոր առանձին գրաֆիկները հաջողությամբ ուղարկվեցին։*",
         parse_mode="Markdown",
         reply_markup=get_live_markup(),
     )
@@ -359,7 +382,7 @@ def handle_text_messages(message):
   else:
     bot.send_message(
         chat_id,
-        "🎛 Սեղմեք ստորև նշված կոճակը՝ հեռարձակումը կամ գրաֆիկը բացելու համար:",
+        "🎛 Սեղմեք ստորև նշված կոճակը՝ հեռարձակումը կամ գրաֆիկները բացելու համար:",
         reply_markup=get_start_markup(),
     )
 
@@ -367,7 +390,6 @@ def handle_text_messages(message):
 def live_stream_loop():
   global is_streaming, is_chart_streaming, is_paused_for_input
   while True:
-    # 1. Տեքստային լայվ հեռարձակում
     if is_streaming and not is_paused_for_input and active_chat_ids:
       d = latest_data
       time_str = datetime.now(YEREVAN_TZ).strftime("%H:%M:%S")
@@ -391,27 +413,16 @@ def live_stream_loop():
         except Exception:
           pass
 
-    # 2. Գրաֆիկների լայվ հեռարձակում
     if is_chart_streaming and active_chat_ids:
-      photo_buf = generate_chart_image()
       for cid in list(active_chat_ids):
-        try:
-          bot.send_photo(
-              cid,
-              photo=photo_buf,
-              caption="📈 *Լայվ թարմացվող գրաֆիկ*",
-              parse_mode="Markdown",
-              reply_markup=get_live_markup(),
-          )
-        except Exception:
-          pass
+        send_all_sensor_charts(cid)
 
-    time.sleep(10)  # Թարմացման հաճախականությունը
+    time.sleep(15)
 
 
 if __name__ == "__main__":
   threading.Thread(target=run_flask, daemon=True).start()
   threading.Thread(target=live_stream_loop, daemon=True).start()
 
-  print("Telegram բոտը և սերվերը աշխատում են գրաֆիկների աջակցությամբ...")
+  print("Telegram բոտը և սերվերը պատրաստ են...")
   bot.infinity_polling(skip_pending=True)
