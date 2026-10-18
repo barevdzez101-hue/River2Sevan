@@ -73,7 +73,6 @@ def update_data():
 
       now = time.time()
       history_data.append({"time": now, "data": dict(latest_data)})
-      # Պահում ենք վերջին 1 ժամվա տվյալները
       history_data = [
           rec for rec in history_data if rec["time"] >= (now - 3600)
       ]
@@ -102,21 +101,35 @@ def get_live_markup():
           "📉 Ուղարկել բոլոր գրաֆիկները (Ալբոմով)", callback_data="send_all_charts"
       )
   )
-  markup.add(
-      InlineKeyboardButton(
-          "🔄 Միացնել գրաֆիկների լայվը", callback_data="start_chart_live"
-      )
-  )
-  markup.add(
-      InlineKeyboardButton(
-          "▶️ Միացնել տեքստային լայվը", callback_data="start_live"
-      )
-  )
-  markup.add(
-      InlineKeyboardButton(
-          "⏹ Կանգնեցնել բոլոր լայվերը", callback_data="stop_live"
-      )
-  )
+
+  # Եթե գրաֆիկների լայվն է աշխատում, տալիս ենք ԿԱՆԳՆԵՑՆԵԼՈՒ կոճակը
+  if is_chart_streaming:
+    markup.add(
+        InlineKeyboardButton(
+            "⏹ Կանգնեցնել լայվ գրաֆիկները", callback_data="stop_live"
+        )
+    )
+  else:
+    markup.add(
+        InlineKeyboardButton(
+            "🔄 Միացնել գրաֆիկների լայվը", callback_data="start_chart_live"
+        )
+    )
+
+  # Եթե տեքստային լայվը ԱԿՏԻՎ ՉԷ, նոր ցույց ենք տալիս ՄԻԱՑՆԵԼՈՒ կոճակը
+  if not is_streaming:
+    markup.add(
+        InlineKeyboardButton(
+            "▶️ Միացնել տեքստային լայվը", callback_data="start_live"
+        )
+    )
+  else:
+    markup.add(
+        InlineKeyboardButton(
+            "⏹ Կանգնեցնել տեքստային լայվը", callback_data="stop_live"
+        )
+    )
+
   return markup
 
 
@@ -140,10 +153,19 @@ def get_start_markup():
   return markup
 
 
+def get_chart_live_stop_markup():
+  """Առանձին կոճակ գրաֆիկների ալբոմի տակ ցույց տալու համար"""
+  markup = InlineKeyboardMarkup()
+  markup.add(
+      InlineKeyboardButton(
+          "⏹ Կանգնեցնել լայվ գրաֆիկները", callback_data="stop_live"
+      )
+  )
+  return markup
+
+
 def generate_single_chart(param_key, param_title, unit, color):
   """Գեներացնում է բարձր որակի առանձին գրաֆիկ"""
-  plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
-  
   if not history_data:
     times = [datetime.now(YEREVAN_TZ)]
     vals = [latest_data.get(param_key, 0.0)]
@@ -166,7 +188,12 @@ def generate_single_chart(param_key, param_title, unit, color):
   ax.set_xlabel("Ժամանակ", fontsize=10, fontweight="bold")
   ax.set_ylabel(f"{param_title} ({unit})", fontsize=10, fontweight="bold")
   ax.grid(True, linestyle="--", alpha=0.5)
-  plt.title(f"{param_title}-ի Փոփոխության Գրաֆիկ", fontsize=12, fontweight="bold", pad=10)
+  plt.title(
+      f"{param_title}-ի Փոփոխության Գրաֆիկ",
+      fontsize=12,
+      fontweight="bold",
+      pad=10,
+  )
   fig.tight_layout()
 
   buf = io.BytesIO()
@@ -313,14 +340,24 @@ def handle_callbacks(call):
     if not recent_records:
       recent_records = [{"time": time.time(), "data": latest_data}]
 
-    avg_temp = sum(r["data"]["temp"] for r in recent_records) / len(recent_records)
+    avg_temp = sum(r["data"]["temp"] for r in recent_records) / len(
+        recent_records
+    )
     avg_ph = sum(r["data"]["ph"] for r in recent_records) / len(recent_records)
     avg_do = sum(r["data"]["do"] for r in recent_records) / len(recent_records)
     avg_ec = sum(r["data"]["ec"] for r in recent_records) / len(recent_records)
-    avg_tds = sum(r["data"]["tds"] for r in recent_records) / len(recent_records)
-    avg_n = sum(r["data"]["nitrogen"] for r in recent_records) / len(recent_records)
-    avg_p = sum(r["data"]["phosphorus"] for r in recent_records) / len(recent_records)
-    avg_k = sum(r["data"]["potassium"] for r in recent_records) / len(recent_records)
+    avg_tds = sum(r["data"]["tds"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_n = sum(r["data"]["nitrogen"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_p = sum(r["data"]["phosphorus"] for r in recent_records) / len(
+        recent_records
+    )
+    avg_k = sum(r["data"]["potassium"] for r in recent_records) / len(
+        recent_records
+    )
 
     now_str = datetime.now(YEREVAN_TZ).strftime("%d.%m.%Y - %H:%M:%S")
 
@@ -359,14 +396,16 @@ def handle_text_messages(message):
       water_liters = volume_m3 * 1000
 
       recommendations = [
-          f"📐 Լողավազանի մակերեսը: `{area} մ²` (~{water_liters:.0f} լիտր ջուր):\n"
+          f"📐 Լողավազանի մակերեսը: `{area} մ²` (~{water_liters:.0f} լիտր"
+          f" ջուր):\n"
       ]
 
       if ph > 7.6:
         diff = ph - 7.2
         grams_needed = volume_m3 * (diff * 10 * 10)
         recommendations.append(
-            f"🧪 *Լուծում:* Ավելացրեք **pH Minus** շուրջ `{max(10, int(grams_needed))} գրամ`։"
+            f"🧪 *Լուծում:* Ավելացրեք **pH Minus** շուրջ"
+            f" `{max(10, int(grams_needed))} գրամ`։"
         )
       elif ph < 6.5:
         recommendations.append(f"🧪 *Լուծում:* Ավելացրեք **pH Plus**։")
@@ -374,13 +413,15 @@ def handle_text_messages(message):
         recommendations.append(f"✅ *Լուծում:* Ջրի ցուցանիշները նորմալ են։")
 
       recommendations.append(
-          f"🔄 *Ֆիլտրացիա:* Միացրեք ֆիլտրը օրական `{int(volume_m3 / 4) + 2}` ժամ։"
+          f"🔄 *Ֆիլտրացիա:* Միացրեք ֆիլտրը օրական"
+          f" `{int(volume_m3 / 4) + 2}` ժամ։"
       )
 
       final_text = "\n".join(recommendations)
       bot.send_message(
           chat_id,
-          f"🛠 *Անհատական Խորհրդատվություն*\n\n{final_text}\n\n▶️ *Հեռարձակումը վերսկսվում է...*",
+          f"🛠 *Անհատական Խորհրդատվություն*\n\n{final_text}\n\n▶️ *Հեռարձակումը"
+          f" վերսկսվում է...*",
           parse_mode="Markdown",
       )
 
@@ -388,7 +429,9 @@ def handle_text_messages(message):
       is_paused_for_input = False
 
     except ValueError:
-      bot.send_message(chat_id, "⚠ Խնդրում եմ գրել միայն թիվ (օրինակ՝ 20):")
+      bot.send_message(
+          chat_id, "⚠ Խնդրում եմ գրել միայն թիվ (օրինակ՝ 20):"
+      )
   else:
     bot.send_message(
         chat_id,
@@ -400,11 +443,20 @@ def handle_text_messages(message):
 def live_stream_loop():
   global is_streaming, is_chart_streaming, is_paused_for_input
   while True:
-    # 1. ԳՐԱՖԻԿՆԵՐԻ ԼԱՅՎ (Եթե միացված է, տեքստերը չեն ուղարկվում)
+    # 1. ԳՐԱՖԻԿՆԵՐԻ ԼԱՅՎ (Ուղարկում ենք ալբոմը և տակը դնում «Կանգնեցնել լայվ գրաֆիկները» կոճակը)
     if is_chart_streaming and active_chat_ids:
       for cid in list(active_chat_ids):
         send_all_sensor_charts_as_album(cid)
-      time.sleep(15)  # Գրաֆիկների թարմացման հաճախականությունը
+        try:
+          bot.send_message(
+              cid,
+              "📈 *Լայվ գրաֆիկները թարմացվեցին:*",
+              parse_mode="Markdown",
+              reply_markup=get_chart_live_stop_markup(),
+          )
+        except Exception:
+          pass
+      time.sleep(15)  # Թարմացում 15 վայրկյանը մեկ
       continue
 
     # 2. ՏԵՔՍՏԱՅԻՆ ԼԱՅՎ (Ուղարկվում է միայն եթե գրաֆիկների լայվը անջատված է)
@@ -430,7 +482,7 @@ def live_stream_loop():
           )
         except Exception:
           pass
-      time.sleep(5)  # Տեքստի թարմացման հաճախականությունը
+      time.sleep(5)  # Թարմացում 5 վայրկյանը մեկ
     else:
       time.sleep(2)
 
