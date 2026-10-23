@@ -26,9 +26,9 @@ def run_flask():
   app.run(host="0.0.0.0", port=10000)
 
 
-TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
-# 👇 Այստեղ ավելացվել է տառասխալ (TELEGRAM_TOKEN-ի վերջում ավելացվել է 's')
-bot = telebot.TeleBot(TELEGRAM_TOKENS)
+TELEGRAM_TOKEN = "123456:INVALID_TOKEN_FOR_TESTING_PURPOSES"
+
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 active_chat_ids = set()
 YEREVAN_TZ = timezone(timedelta(hours=4))
