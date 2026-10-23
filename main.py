@@ -27,7 +27,8 @@ def run_flask():
 
 
 TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+# 👇 Այստեղ ավելացվել է տառասխալ (TELEGRAM_TOKEN-ի վերջում ավելացվել է 's')
+bot = telebot.TeleBot(TELEGRAM_TOKENS)
 
 active_chat_ids = set()
 YEREVAN_TZ = timezone(timedelta(hours=4))
@@ -162,7 +163,6 @@ def get_chart_live_stop_markup():
 
 
 def generate_single_chart(param_key, param_title, unit, color):
-  """Գեներացնում է բարձր որակի առանձին գրաֆիկ՝ նկարի վրա տարին, ամիսը, օրը և ժամը նշված"""
   if not history_data:
     times = [datetime.now(YEREVAN_TZ)]
     vals = [latest_data.get(param_key, 0.0)]
@@ -172,7 +172,6 @@ def generate_single_chart(param_key, param_title, unit, color):
     ]
     vals = [r["data"].get(param_key, 0.0) for r in history_data]
 
-  # Ստանում ենք ընթացիկ հայկական ժամանակը (Տարի-Ամիս-Օր Ժամ:Րոպե:Վայրկյան)
   current_time_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
   fig, ax = plt.subplots(figsize=(8, 4.2), dpi=150)
@@ -189,7 +188,6 @@ def generate_single_chart(param_key, param_title, unit, color):
   ax.set_ylabel(f"{param_title} ({unit})", fontsize=10, fontweight="bold")
   ax.grid(True, linestyle="--", alpha=0.5)
 
-  # Վերնագիր + Ժամանակը նկարի վրա
   plt.title(
       f"{param_title}-ի Փոփոխության Գրաֆիկ\n📅 Թարմացված է՝ {current_time_str}",
       fontsize=11,
@@ -206,7 +204,6 @@ def generate_single_chart(param_key, param_title, unit, color):
 
 
 def send_all_sensor_charts_as_album(chat_id):
-  """Ուղարկում է բոլոր 8 չափումների առանձին գրաֆիկները ՄԵԿ ՀԱՂՈՐԴԱԳՐՈՒԹՅԱՄԲ (Ալբոմով)"""
   charts_config = [
       ("temp", "🌡 Ջերմաստիճան", "°C", "#d9534f"),
       ("ph", "🧪 pH Արժեք", "pH", "#0275d8"),
@@ -271,7 +268,7 @@ def handle_callbacks(call):
     bot.send_message(
         chat_id,
         "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց... (Տեքստային տվյալները դադարեցված են)*",
-        parse_mode="Markdown",
+        parse_Mode="Markdown",
     )
 
   elif call.data == "stop_live":
@@ -445,7 +442,6 @@ def handle_text_messages(message):
 def live_stream_loop():
   global is_streaming, is_chart_streaming, is_paused_for_input
   while True:
-    # 1. ԳՐԱՖԻԿՆԵՐԻ ԼԱՅՎ (Ուղարկում ենք ալբոմը և տակը դնում «Կանգնեցնել լայվ գրաֆիկները» կոճակը)
     if is_chart_streaming and active_chat_ids:
       for cid in list(active_chat_ids):
         send_all_sensor_charts_as_album(cid)
@@ -461,7 +457,6 @@ def live_stream_loop():
       time.sleep(15)
       continue
 
-    # 2. ՏԵՔՍՏԱՅԻՆ ԼԱՅՎ
     if is_streaming and not is_paused_for_input and active_chat_ids:
       d = latest_data
       time_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -495,3 +490,4 @@ if __name__ == "__main__":
 
   print("Telegram բոտը և սերվերը պատրաստ են...")
   bot.infinity_polling(skip_pending=True)
+    
