@@ -26,7 +26,7 @@ def run_flask():
   app.run(host="0.0.0.0", port=10000)
 
 
-TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
+TELEGRAM_TOKEN = "8877206876:AAHQgJ90RvBjKV_vjJQVLpCo6MCKfAK7JI0"
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 active_chat_ids = set()
