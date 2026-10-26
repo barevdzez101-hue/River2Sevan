@@ -26,7 +26,8 @@ def run_flask():
   app.run(host="0.0.0.0", port=10000)
 
 
-TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
+# Ձեր նոր Telegram Token-ը
+TELEGRAM_TOKEN = "8763355556:AAEhOWOYmGFCThlkeQdCPY031zyS6_cMc7g"
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 active_chat_ids = set()
@@ -488,6 +489,5 @@ if __name__ == "__main__":
   threading.Thread(target=live_stream_loop, daemon=True).start()
 
   print("Telegram բոտը և սերվերը պատրաստ են...")
-  # Ավելացվել է remove_webhook=True՝ 409 Conflict սխալը բացառելու համար
   bot.infinity_polling(skip_pending=True, remove_webhook=True)
       
