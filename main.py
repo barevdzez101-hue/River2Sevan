@@ -27,7 +27,7 @@ def run_flask():
 
 
 # Ձեր նոր Telegram Token-ը
-TELEGRAM_TOKEN = "8763355556:AAEhOWOYmGFCThlkeQdCPY031zyS6_cMc7g"
+TELEGRAM_TOKEN = "8877206876:AAHQgJ90RvBjKV_vjJQVLpCo6MCKfAK7JI0"
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 active_chat_ids = set()
