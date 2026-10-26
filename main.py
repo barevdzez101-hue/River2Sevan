@@ -27,7 +27,6 @@ def run_flask():
 
 
 TELEGRAM_TOKEN = "8763355556:AAH8Yy4X0Fc57M9CDF-UWT8BWh6_pk2hYI0"
-
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 active_chat_ids = set()
@@ -268,7 +267,7 @@ def handle_callbacks(call):
     bot.send_message(
         chat_id,
         "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց... (Տեքստային տվյալները դադարեցված են)*",
-        parse_Mode="Markdown",
+        parse_mode="Markdown",  # <-- ՈՒՂՂՎԱԾ Է (parse_mode փոքրատառով)
     )
 
   elif call.data == "stop_live":
@@ -490,4 +489,3 @@ if __name__ == "__main__":
 
   print("Telegram բոտը և սերվերը պատրաստ են...")
   bot.infinity_polling(skip_pending=True)
-    
