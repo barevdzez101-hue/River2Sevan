@@ -267,7 +267,7 @@ def handle_callbacks(call):
     bot.send_message(
         chat_id,
         "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց... (Տեքստային տվյալները դադարեցված են)*",
-        parse_mode="Markdown",  # <-- ՈՒՂՂՎԱԾ Է (parse_mode փոքրատառով)
+        parse_mode="Markdown",
     )
 
   elif call.data == "stop_live":
@@ -488,4 +488,6 @@ if __name__ == "__main__":
   threading.Thread(target=live_stream_loop, daemon=True).start()
 
   print("Telegram բոտը և սերվերը պատրաստ են...")
-  bot.infinity_polling(skip_pending=True)
+  # Ավելացվել է remove_webhook=True՝ 409 Conflict սխալը բացառելու համար
+  bot.infinity_polling(skip_pending=True, remove_webhook=True)
+      
