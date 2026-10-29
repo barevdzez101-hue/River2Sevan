@@ -38,7 +38,7 @@ is_chart_streaming = False
 is_paused_for_input = False
 user_states = {}
 
-TELEGRAM_TOKEN = "8698217070:AAHwjJPjxx_UaIOHhGJNe7KiqKhjW7tW01g"
+TELEGRAM_TOKEN = "8698217070:AAFkbKoooX8hpnhD5Cfqr83U5cfOCI6lBvI"
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 active_chat_ids = set()
 
