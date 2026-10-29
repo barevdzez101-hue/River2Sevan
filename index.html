@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ջրի Որակի Մոնիտորինգ - River2Sevan</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { color: #38bdf8; margin-bottom: 5px; text-align: center; }
+        p.subtitle { color: #94a3b8; margin-bottom: 25px; text-align: center; }
+        
+        .menu-container, .content-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+        }
+        .btn {
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            margin: 10px;
+            width: 100%;
+            max-width: 400px;
+            transition: 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .btn:hover { background-color: #0369a1; transform: translateY(-2px); }
+        .btn-stop { background-color: #ef4444; margin-top: 20px; }
+        .btn-stop:hover { background-color: #dc2626; }
+
+        .hidden { display: none !important; }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .card {
+            background-color: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border-left: 5px solid #38bdf8;
+        }
+        .card h3 { margin: 0; font-size: 14px; color: #94a3b8; }
+        .card p { margin: 10px 0 0 0; font-size: 22px; font-weight: bold; color: #f8fafc; }
+
+        .chart-box {
+            background-color: #1e293b;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            width: 100%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🌊 Ջրի Որակի Մոնիտորինգ</h1>
+    <p class="subtitle">Իրական ժամանակի տվյալներ ESP32-S3 սարքից</p>
+
+    <!-- ՍԿԶԲՆԱԿԱՆ ՄԵՆՅՈ (Երկու կոճակ) -->
+    <div id="main-menu" class="menu-container">
+        <button class="btn" onclick="showView('numbers')">📊 Տվյալները թվերով</button>
+        <button class="btn" onclick="showView('charts')">📈 Տվյալները գրաֆիկով</button>
+    </div>
+
+    <!-- ԹՎԱՅԻՆ ՏՎՅԱԼՆԵՐԻ ԷՋ -->
+    <div id="numbers-view" class="content-container hidden">
+        <div class="cards-grid" id="sensors-grid">
+            <!-- Տվյալները կլցվեն ավտոմատ -->
+        </div>
+        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել</button>
+    </div>
+
+    <!-- ԳՐԱՖԻԿՆԵՐԻ ԷՋ -->
+    <div id="charts-view" class="content-container hidden">
+        <div class="chart-box"><canvas id="tempChart"></canvas></div>
+        <div class="chart-box"><canvas id="phChart"></canvas></div>
+        <div class="chart-box"><canvas id="doChart"></canvas></div>
+        <div class="chart-box"><canvas id="tdsChart"></canvas></div>
+        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել</button>
+    </div>
+
+    <script>
+        let intervalId = null;
+        let tempChart, phChart, doChart, tdsChart;
+
+        function showView(viewType) {
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('numbers-view').classList.add('hidden');
+            document.getElementById('charts-view').classList.add('hidden');
+
+            if (viewType === 'numbers') {
+                document.getElementById('numbers-view').classList.remove('hidden');
+                fetchNumbers();
+                intervalId = setInterval(fetchNumbers, 5000); // Թարմացում ամեն 5 վայրկյանը մեկ
+            } else if (viewType === 'charts') {
+                document.getElementById('charts-view').classList.remove('hidden');
+                initCharts();
+                fetchChartsData();
+                intervalId = setInterval(fetchChartsData, 5000);
+            }
+        }
+
+        function stopView() {
+            clearInterval(intervalId);
+            document.getElementById('numbers-view').classList.add('hidden');
+            document.getElementById('charts-view').classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+        }
+
+        async function fetchNumbers() {
+            try {
+                let response = await fetch('/api/data');
+                let data = await response.json();
+                
+                let grid = document.getElementById('sensors-grid');
+                grid.innerHTML = `
+                    <div class="card"><h3>🌡 Ջերմաստիճան</h3><p>${data.temp} °C</p></div>
+                    <div class="card"><h3>🧪 pH Արժեք</h3><p>${data.ph}</p></div>
+                    <div class="card"><h3>💨 Թթվածին (DO)</h3><p>${data.do} mg/L</p></div>
+                    <div class="card"><h3>⚡ EC</h3><p>${data.ec} uS/cm</p></div>
+                    <div class="card"><h3>🧂 TDS</h3><p>${data.tds} ppm</p></div>
+                    <div class="card"><h3>🟢 Ազոտ (N)</h3><p>${data.nitrogen} mg/L</p></div>
+                    <div class="card"><h3>🟣 Ֆոսֆոր (P)</h3><p>${data.phosphorus} mg/L</p></div>
+                    <div class="card"><h3>🔴 Կալիում (K)</h3><p>${data.potassium} mg/L</p></div>
+                `;
+            } catch (e) { console.error(e); }
+        }
+
+        function initCharts() {
+            if (tempChart) return;
+
+            const createChart = (elemId, labelText, lineColor) => {
+                const ctx = document.getElementById(elemId).getContext('2d');
+                return new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: [], datasets: [{ label: labelText, data: [], borderColor: lineColor, tension: 0.2 }] },
+                    options: { responsive: true, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
+            };
+
+            tempChart = createChart('tempChart', 'Ջերմաստիճան (°C)', '#d9534f');
+            phChart = createChart('phChart', 'pH Արժեք', '#0275d8');
+            doChart = createChart('doChart', 'Թթվածին DO (mg/L)', '#5bc0de');
+            tdsChart = createChart('tdsChart', 'TDS (ppm)', '#f0ad4e');
+        }
+
+        async function fetchChartsData() {
+            try {
+                let response = await fetch('/api/history');
+                let history = await response.json();
+                
+                let times = history.map(r => new Date(r.time * 1000).toLocaleTimeString());
+                
+                tempChart.data.labels = times;
+                tempChart.data.datasets[0].data = history.map(r => r.data.temp);
+                tempChart.update();
+
+                phChart.data.labels = times;
+                phChart.data.datasets[0].data = history.map(r => r.data.ph);
+                phChart.update();
+
+                doChart.data.labels = times;
+                doChart.data.datasets[0].data = history.map(r => r.data.do);
+                doChart.update();
+
+                tdsChart.data.labels = times;
+                tdsChart.data.datasets[0].data = history.map(r => r.data.tds);
+                tdsChart.update();
+            } catch (e) { console.error(e); }
+        }
+    </script>
+</body>
+</html>
