@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import io
 import threading
 import time
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 import matplotlib
 
 matplotlib.use('Agg')
@@ -14,24 +14,13 @@ from telebot.types import (
     InputMediaPhoto,
 )
 
-app = Flask(__name__)
+# Կարգավորում ենք, որ Flask-ը template-ները փնտրի նույն պանակից
+app = Flask(__name__, template_folder='.')
 
-
-@app.route("/")
-def home():
-  return "Bot is running 24/7 with timestamps on charts!"
-
-
-def run_flask():
-  app.run(host="0.0.0.0", port=10000)
-
-
-TELEGRAM_TOKEN = "8698217070:AAHwjJPjxx_UaIOHhGJNe7KiqKhjW7tW01g"
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-
-active_chat_ids = set()
+# Հայկական ժամանակային գոտի
 YEREVAN_TZ = timezone(timedelta(hours=4))
 
+# Վերջին ստացված տվյալները
 latest_data = {
     "temp": 0.0,
     "ph": 0.0,
@@ -49,9 +38,35 @@ is_chart_streaming = False
 is_paused_for_input = False
 user_states = {}
 
+TELEGRAM_TOKEN = "8698217070:AAHwjJPjxx_UaIOHhGJNe7KiqKhjW7tW01g"
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+active_chat_ids = set()
+
+
+# ==================== ԿԱՅՔԻ ԵՎ API-ՆԵՐԻ ROUTE-ՆԵՐ ====================
+
+
+@app.route("/")
+def home():
+  # Կարդում և ուղարկում է index.html ֆայլը բրաուզերին
+  return render_template("index.html")
+
+
+@app.route("/api/data", methods=["GET"])
+def api_data():
+  # Վերադարձնում է վերջին տվյալները JSON ձևաչափով կայքի համար
+  return jsonify(latest_data)
+
+
+@app.route("/api/history", methods=["GET"])
+def api_history():
+  # Վերադարձնում է 1 ժամվա պատմությունը գրաֆիկների համար
+  return jsonify(history_data)
+
 
 @app.route("/update-data", methods=["POST"])
 def update_data():
+  # ESP32-ից տվյալների ընդունման հասցե
   global latest_data, history_data
   try:
     data = request.json
@@ -81,6 +96,13 @@ def update_data():
   except Exception as e:
     return jsonify({"status": "error", "message": str(e)}), 400
   return jsonify({"status": "bad request"}), 400
+
+
+def run_flask():
+  app.run(host="0.0.0.0", port=10000)
+
+
+# ==================== TELEGRAM BOT ԼՈԳԻԿԱ ====================
 
 
 def get_live_markup():
@@ -162,7 +184,6 @@ def get_chart_live_stop_markup():
 
 
 def generate_single_chart(param_key, param_title, unit, color):
-  """Գեներացնում է բարձր որակի առանձին գրաֆիկ՝ նկարի վրա տարին, ամիսը, օրը և ժամը նշված"""
   if not history_data:
     times = [datetime.now(YEREVAN_TZ)]
     vals = [latest_data.get(param_key, 0.0)]
@@ -172,7 +193,6 @@ def generate_single_chart(param_key, param_title, unit, color):
     ]
     vals = [r["data"].get(param_key, 0.0) for r in history_data]
 
-  # Ստանում ենք ընթացիկ հայկական ժամանակը (Տարի-Ամիս-Օր Ժամ:Րոպե:Վայրկյան)
   current_time_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
   fig, ax = plt.subplots(figsize=(8, 4.2), dpi=150)
@@ -185,11 +205,10 @@ def generate_single_chart(param_key, param_title, unit, color):
       linewidth=2,
       label=f"{param_title} ({unit})",
   )
-  ax.set_xlabel("Ժամանակ (հետհաշվարկ)", fontsize=9, fontweight="bold")
+  ax.set_xlabel("Ժամանակ", fontsize=9, fontweight="bold")
   ax.set_ylabel(f"{param_title} ({unit})", fontsize=10, fontweight="bold")
   ax.grid(True, linestyle="--", alpha=0.5)
 
-  # Վերնագիր + Ժամանակը նկարի վրա
   plt.title(
       f"{param_title}-ի Փոփոխության Գրաֆիկ\n📅 Թարմացված է՝ {current_time_str}",
       fontsize=11,
@@ -206,7 +225,6 @@ def generate_single_chart(param_key, param_title, unit, color):
 
 
 def send_all_sensor_charts_as_album(chat_id):
-  """Ուղարկում է բոլոր 8 չափումների առանձին գրաֆիկները ՄԵԿ ՀԱՂՈՐԴԱԳՐՈՒԹՅԱՄԲ (Ալբոմով)"""
   charts_config = [
       ("temp", "🌡 Ջերմաստիճան", "°C", "#d9534f"),
       ("ph", "🧪 pH Արժեք", "pH", "#0275d8"),
@@ -270,7 +288,7 @@ def handle_callbacks(call):
     bot.answer_callback_query(call.id, "Գրաֆիկների լայվը միացվեց!")
     bot.send_message(
         chat_id,
-        "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց... (Տեքստային տվյալները դադարեցված են)*",
+        "📈 *Գրաֆիկների լայվ հեռարձակումը սկսվեց...*",
         parse_mode="Markdown",
     )
 
@@ -286,173 +304,20 @@ def handle_callbacks(call):
     )
 
   elif call.data == "send_all_charts":
-    bot.answer_callback_query(
-        call.id, "Գեներացվում են բարձր որակի գրաֆիկները ժամանակագրությամբ..."
-    )
+    bot.answer_callback_query(call.id, "Գեներացվում են գրաֆիկները...")
     send_all_sensor_charts_as_album(chat_id)
-    bot.send_message(
-        chat_id,
-        "✅ *Բոլոր 8 առանձին գրաֆիկները ուղարկվեցին մեկ ալբոմով։*",
-        parse_mode="Markdown",
-        reply_markup=get_live_markup(),
-    )
-
-  elif call.data == "analyze_current":
-    is_paused_for_input = True
-    bot.answer_callback_query(call.id, "Վերլուծվում են տվյալները...")
-
-    d = latest_data
-    ph = float(d.get("ph", 7))
-    do = float(d.get("do", 6))
-    tds = float(d.get("tds", 100))
-
-    analysis = []
-    if 6.5 <= ph <= 7.6:
-      analysis.append(f"✅ pH-ը նորմալ է ({ph}):")
-    else:
-      analysis.append(f"❌ pH-ը խախտված է ({ph}):")
-
-    if do >= 5.0:
-      analysis.append(f"✅ Թթվածինը լավ է ({do} mg/L):")
-    else:
-      analysis.append(f"❌ Թթվածինը ցածր է ({do} mg/L):")
-
-    if tds <= 400:
-      analysis.append(f"✅ TDS-ը նորմալ է ({tds} ppm):")
-    else:
-      analysis.append(f"❌ TDS-ը բարձր է ({tds} ppm):")
-
-    report = "\n".join(analysis)
-    user_states[chat_id] = {"action": "pool_size_current", "data": d}
-
-    msg = (
-        f"📊 *Ընթացիկ Տվյալների Վերլուծություն*\n\n{report}\n\n"
-        f"⏸ *Լայվը դադարեցված է սպասման ռեժիմում։*\n"
-        f"💧 *Խնդրում եմ գրեք ձեր լողավազանի մակերեսը (քառակուսի մետրով, օրինակ՝ 20):*"
-    )
-    bot.send_message(chat_id, msg, parse_mode="Markdown")
-
-  elif call.data == "analyze_history":
-    is_paused_for_input = True
-    bot.answer_callback_query(call.id, "Հաշվարկվում են բոլոր տվյալները...")
-
-    recent_records = [
-        rec for rec in history_data if rec["time"] >= (time.time() - 3600)
-    ]
-    if not recent_records:
-      recent_records = [{"time": time.time(), "data": latest_data}]
-
-    avg_temp = sum(r["data"]["temp"] for r in recent_records) / len(
-        recent_records
-    )
-    avg_ph = sum(r["data"]["ph"] for r in recent_records) / len(recent_records)
-    avg_do = sum(r["data"]["do"] for r in recent_records) / len(recent_records)
-    avg_ec = sum(r["data"]["ec"] for r in recent_records) / len(recent_records)
-    avg_tds = sum(r["data"]["tds"] for r in recent_records) / len(
-        recent_records
-    )
-    avg_n = sum(r["data"]["nitrogen"] for r in recent_records) / len(
-        recent_records
-    )
-    avg_p = sum(r["data"]["phosphorus"] for r in recent_records) / len(
-        recent_records
-    )
-    avg_k = sum(r["data"]["potassium"] for r in recent_records) / len(
-        recent_records
-    )
-
-    now_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d - %H:%M:%S")
-
-    msg = (
-        f"📈 *1 Ժամվա Բոլոր Տվյալների Վերլուծություն*\n"
-        f"🕒 Ժամ՝ `{now_str}`\n"
-        f"📊 Չափումների քանակը՝ `{len(recent_records)}` հատ\n\n"
-        f"🌡 Միջին ջերմաստիճան՝ `{avg_temp:.1f} °C`\n"
-        f"🧪 Միջին pH՝ `{avg_ph:.2f}`\n"
-        f"💨 Միջին Թթվածին (DO)՝ `{avg_do:.2f} mg/L`\n"
-        f"⚡ Միջին EC՝ `{avg_ec:.2f} uS/cm`\n"
-        f"🧂 Միջին TDS՝ `{avg_tds:.2f} ppm`\n"
-        f"🟢 Միջին Ազոտ (N)՝ `{avg_n:.2f} mg/L`\n"
-        f"🟣 Միջին Ֆոսֆոր (P)՝ `{avg_p:.3f} mg/L`\n"
-        f"🔴 Միջին Կալիում (K)՝ `{avg_k:.2f} mg/L`\n\n"
-        f"▶️ *Հեռարձակումը շարունակվում է...*"
-    )
-    bot.send_message(chat_id, msg, parse_mode="Markdown")
-    is_paused_for_input = False
-
-
-@bot.message_handler(func=lambda message: True)
-def handle_text_messages(message):
-  global is_paused_for_input, user_states
-  chat_id = message.chat.id
-  active_chat_ids.add(chat_id)
-
-  if chat_id in user_states:
-    state = user_states[chat_id]
-    try:
-      area = float(message.text.strip())
-      d = state["data"]
-      ph = float(d.get("ph", 7))
-
-      volume_m3 = area * 1.5
-      water_liters = volume_m3 * 1000
-
-      recommendations = [
-          f"📐 Լողավազանի մակերեսը: `{area} մ²` (~{water_liters:.0f} լիտր"
-          f" ջուր):\n"
-      ]
-
-      if ph > 7.6:
-        diff = ph - 7.2
-        grams_needed = volume_m3 * (diff * 10 * 10)
-        recommendations.append(
-            f"🧪 *Լուծում:* Ավելացրեք **pH Minus** շուրջ"
-            f" `{max(10, int(grams_needed))} գրամ`։"
-        )
-      elif ph < 6.5:
-        recommendations.append(f"🧪 *Լուծում:* Ավելացրեք **pH Plus**։")
-      else:
-        recommendations.append(f"✅ *Լուծում:* Ջրի ցուցանիշները նորմալ են։")
-
-      recommendations.append(
-          f"🔄 *Ֆիլտրացիա:* Միացրեք ֆիլտրը օրական"
-          f" `{int(volume_m3 / 4) + 2}` ժամ։"
-      )
-
-      final_text = "\n".join(recommendations)
-      bot.send_message(
-          chat_id,
-          f"🛠 *Անհատական Խորհրդատվություն*\n\n{final_text}\n\n▶️ *Հեռարձակումը"
-          f" վերսկսվում է...*",
-          parse_mode="Markdown",
-      )
-
-      del user_states[chat_id]
-      is_paused_for_input = False
-
-    except ValueError:
-      bot.send_message(
-          chat_id, "⚠ Խնդրում եմ գրել միայն թիվ (օրինակ՝ 20):"
-      )
-  else:
-    bot.send_message(
-        chat_id,
-        "🎛 Սեղմեք ստորև նշված կոճակը՝ հեռարձակումը կամ գրաֆիկները բացելու համար:",
-        reply_markup=get_start_markup(),
-    )
 
 
 def live_stream_loop():
   global is_streaming, is_chart_streaming, is_paused_for_input
   while True:
-    # 1. ԳՐԱՖԻԿՆԵՐԻ ԼԱՅՎ (Ուղարկում ենք ալբոմը և տակը դնում «Կանգնեցնել լայվ գրաֆիկները» կոճակը)
     if is_chart_streaming and active_chat_ids:
       for cid in list(active_chat_ids):
         send_all_sensor_charts_as_album(cid)
         try:
           bot.send_message(
               cid,
-              "📈 *Լայվ գրաֆիկները թարմացվեցին ըստ ժամանակի:*",
+              "📈 *Լայվ գրաֆիկները թարմացվեցին:*",
               parse_mode="Markdown",
               reply_markup=get_chart_live_stop_markup(),
           )
@@ -461,7 +326,6 @@ def live_stream_loop():
       time.sleep(15)
       continue
 
-    # 2. ՏԵՔՍՏԱՅԻՆ ԼԱՅՎ
     if is_streaming and not is_paused_for_input and active_chat_ids:
       d = latest_data
       time_str = datetime.now(YEREVAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -494,5 +358,5 @@ if __name__ == "__main__":
   threading.Thread(target=live_stream_loop, daemon=True).start()
 
   print("Telegram բոտը և սերվերը պատրաստ են...")
-  bot.infinity_polling(skip_pending=True)
+  bot.infinity_polling(skip_pending=True, remove_webhook=True)
       
