@@ -24,7 +24,7 @@
             flex-direction: column;
             align-items: center;
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
         }
         .btn {
             background-color: #0284c7;
@@ -44,12 +44,14 @@
         .btn:hover { background-color: #0369a1; transform: translateY(-2px); }
         .btn-stop { background-color: #ef4444; margin-top: 20px; }
         .btn-stop:hover { background-color: #dc2626; }
+        .btn-download { background-color: #10b981; padding: 8px 15px; font-size: 14px; margin-bottom: 10px; }
+        .btn-download:hover { background-color: #059669; }
 
         .hidden { display: none !important; }
 
         .cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
             width: 100%;
             margin-bottom: 20px;
@@ -67,60 +69,130 @@
 
         .chart-box {
             background-color: #1e293b;
-            padding: 15px;
+            padding: 20px;
             border-radius: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             width: 100%;
             box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
         }
+        canvas { width: 100% !important; max-height: 300px; }
+
+        .analysis-box {
+            background-color: #1e293b;
+            padding: 25px;
+            border-radius: 12px;
+            width: 100%;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .analysis-box input {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: white;
+            width: 200px;
+            margin-right: 10px;
+        }
+        .analysis-box ul { padding-left: 20px; line-height: 1.6; }
     </style>
 </head>
 <body>
 
     <h1>🌊 Ջրի Որակի Մոնիտորինգ</h1>
-    <p class="subtitle">Իրական ժամանակի տվյալներ ESP32-S3 սարքից</p>
+    <p class="subtitle">River2Sevan - Իրական ժամանակի համակարգ</p>
 
-    <!-- ՍԿԶԲՆԱԿԱՆ ՄԵՆՅՈ (Երկու կոճակ) -->
+    <!-- ԳԼԽԱՎՈՐ ՄԵՆՅՈ -->
     <div id="main-menu" class="menu-container">
         <button class="btn" onclick="showView('numbers')">📊 Տվյալները թվերով</button>
-        <button class="btn" onclick="showView('charts')">📈 Տվյալները գրաֆիկով</button>
+        <button class="btn" onclick="showView('charts')">📈 Տվյալները գրաֆիկներով</button>
+        <button class="btn" onclick="showView('analysis')">🧪 Տվյալների վերլուծություն և խորհուրդներ</button>
     </div>
 
-    <!-- ԹՎԱՅԻՆ ՏՎՅԱԼՆԵՐԻ ԷՋ -->
+    <!-- 1. ԹՎԱՅԻՆ ՏՎՅԱԼՆԵՐ -->
     <div id="numbers-view" class="content-container hidden">
-        <div class="cards-grid" id="sensors-grid">
-            <!-- Տվյալները կլցվեն ավտոմատ -->
-        </div>
-        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել</button>
+        <div class="cards-grid" id="sensors-grid"></div>
+        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել / Հետ</button>
     </div>
 
-    <!-- ԳՐԱՖԻԿՆԵՐԻ ԷՋ -->
+    <!-- 2. ԳՐԱՖԻԿՆԵՐԻ ԷՋ -->
     <div id="charts-view" class="content-container hidden">
-        <div class="chart-box"><canvas id="tempChart"></canvas></div>
-        <div class="chart-box"><canvas id="phChart"></canvas></div>
-        <div class="chart-box"><canvas id="doChart"></canvas></div>
-        <div class="chart-box"><canvas id="tdsChart"></canvas></div>
-        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել</button>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('tempChart', 'Temp_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="tempChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('phChart', 'PH_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="phChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('doChart', 'DO_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="doChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('ecChart', 'EC_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="ecChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('tdsChart', 'TDS_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="tdsChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('nitrogenChart', 'Nitrogen_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="nitrogenChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('phosphorusChart', 'Phosphorus_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="phosphorusChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <button class="btn btn-download" onclick="downloadChart('potassiumChart', 'Potassium_Chart.png')">📥 Ներբեռնել գրաֆիկը</button>
+            <canvas id="potassiumChart"></canvas>
+        </div>
+        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել / Հետ</button>
+    </div>
+
+    <!-- 3. ՎԵՐԼՈՒԾՈՒԹՅԱՆ ԷՋ -->
+    <div id="analysis-view" class="content-container hidden">
+        <div class="analysis-box">
+            <h3>💧 Մուտքագրեք լողավազանի կամ ջրամբարի մակերեսը</h3>
+            <p>Նշեք մակերեսը քառակուսի մետրով (օրինակ՝ 20):</p>
+            <input type="number" id="poolArea" value="20" min="1">
+            <button class="btn" style="max-width: 150px; padding: 10px; display:inline-block;" onclick="fetchAnalysis()">Վերլուծել</button>
+            
+            <div id="analysis-results" style="margin-top: 20px;">
+                <!-- Արդյունքները կհայտնվեն այստեղ -->
+            </div>
+        </div>
+        <button class="btn btn-stop" onclick="stopView()">⏹ Դադարեցնել / Հետ</button>
     </div>
 
     <script>
         let intervalId = null;
-        let tempChart, phChart, doChart, tdsChart;
+        let charts = {};
 
         function showView(viewType) {
             document.getElementById('main-menu').classList.add('hidden');
             document.getElementById('numbers-view').classList.add('hidden');
             document.getElementById('charts-view').classList.add('hidden');
+            document.getElementById('analysis-view').classList.add('hidden');
 
             if (viewType === 'numbers') {
                 document.getElementById('numbers-view').classList.remove('hidden');
                 fetchNumbers();
-                intervalId = setInterval(fetchNumbers, 5000); // Թարմացում ամեն 5 վայրկյանը մեկ
+                intervalId = setInterval(fetchNumbers, 5000);
             } else if (viewType === 'charts') {
                 document.getElementById('charts-view').classList.remove('hidden');
                 initCharts();
                 fetchChartsData();
                 intervalId = setInterval(fetchChartsData, 5000);
+            } else if (viewType === 'analysis') {
+                document.getElementById('analysis-view').classList.remove('hidden');
+                fetchAnalysis();
             }
         }
 
@@ -128,69 +200,80 @@
             clearInterval(intervalId);
             document.getElementById('numbers-view').classList.add('hidden');
             document.getElementById('charts-view').classList.add('hidden');
+            document.getElementById('analysis-view').classList.add('hidden');
             document.getElementById('main-menu').classList.remove('hidden');
         }
 
         async function fetchNumbers() {
-            try {
-                let response = await fetch('/api/data');
-                let data = await response.json();
-                
-                let grid = document.getElementById('sensors-grid');
-                grid.innerHTML = `
-                    <div class="card"><h3>🌡 Ջերմաստիճան</h3><p>${data.temp} °C</p></div>
-                    <div class="card"><h3>🧪 pH Արժեք</h3><p>${data.ph}</p></div>
-                    <div class="card"><h3>💨 Թթվածին (DO)</h3><p>${data.do} mg/L</p></div>
-                    <div class="card"><h3>⚡ EC</h3><p>${data.ec} uS/cm</p></div>
-                    <div class="card"><h3>🧂 TDS</h3><p>${data.tds} ppm</p></div>
-                    <div class="card"><h3>🟢 Ազոտ (N)</h3><p>${data.nitrogen} mg/L</p></div>
-                    <div class="card"><h3>🟣 Ֆոսֆոր (P)</h3><p>${data.phosphorus} mg/L</p></div>
-                    <div class="card"><h3>🔴 Կալիում (K)</h3><p>${data.potassium} mg/L</p></div>
-                `;
-            } catch (e) { console.error(e); }
+            let res = await fetch('/api/data');
+            let data = await res.json();
+            document.getElementById('sensors-grid').innerHTML = `
+                <div class="card"><h3>🌡 Ջերմաստիճան</h3><p>${data.temp} °C</p></div>
+                <div class="card"><h3>🧪 pH Արժեք</h3><p>${data.ph}</p></div>
+                <div class="card"><h3>💨 Թթվածին (DO)</h3><p>${data.do} mg/L</p></div>
+                <div class="card"><h3>⚡ EC</h3><p>${data.ec} uS/cm</p></div>
+                <div class="card"><h3>🧂 TDS</h3><p>${data.tds} ppm</p></div>
+                <div class="card"><h3>🟢 Ազոտ (N)</h3><p>${data.nitrogen} mg/L</p></div>
+                <div class="card"><h3>🟣 Ֆոսֆոր (P)</h3><p>${data.phosphorus} mg/L</p></div>
+                <div class="card"><h3>🔴 Կալիում (K)</h3><p>${data.potassium} mg/L</p></div>
+            `;
         }
 
         function initCharts() {
-            if (tempChart) return;
+            if (charts.temp) return;
+            const make = (id, label, color) => new Chart(document.getElementById(id).getContext('2d'), {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: label, data: [], borderColor: color, tension: 0.2 }] },
+                options: { responsive: true, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
+            });
 
-            const createChart = (elemId, labelText, lineColor) => {
-                const ctx = document.getElementById(elemId).getContext('2d');
-                return new Chart(ctx, {
-                    type: 'line',
-                    data: { labels: [], datasets: [{ label: labelText, data: [], borderColor: lineColor, tension: 0.2 }] },
-                    options: { responsive: true, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
-                });
-            };
-
-            tempChart = createChart('tempChart', 'Ջերմաստիճան (°C)', '#d9534f');
-            phChart = createChart('phChart', 'pH Արժեք', '#0275d8');
-            doChart = createChart('doChart', 'Թթվածին DO (mg/L)', '#5bc0de');
-            tdsChart = createChart('tdsChart', 'TDS (ppm)', '#f0ad4e');
+            charts.temp = make('tempChart', 'Ջերմաստիճան (°C)', '#d9534f');
+            charts.ph = make('phChart', 'pH Արժեք', '#0275d8');
+            charts.do = make('doChart', 'Թթվածին DO (mg/L)', '#5bc0de');
+            charts.ec = make('ecChart', 'EC (uS/cm)', '#6f42c1');
+            charts.tds = make('tdsChart', 'TDS (ppm)', '#f0ad4e');
+            charts.nitrogen = make('nitrogenChart', 'Ազոտ N (mg/L)', '#5cb85c');
+            charts.phosphorus = make('phosphorusChart', 'Ֆոսֆոր P (mg/L)', '#e83e8c');
+            charts.potassium = make('potassiumChart', 'Կալիում K (mg/L)', '#8d6e63');
         }
 
         async function fetchChartsData() {
-            try {
-                let response = await fetch('/api/history');
-                let history = await response.json();
-                
-                let times = history.map(r => new Date(r.time * 1000).toLocaleTimeString());
-                
-                tempChart.data.labels = times;
-                tempChart.data.datasets[0].data = history.map(r => r.data.temp);
-                tempChart.update();
+            let res = await fetch('/api/history');
+            let history = await res.json();
+            let times = history.map(r => new Date(r.time * 1000).toLocaleTimeString());
 
-                phChart.data.labels = times;
-                phChart.data.datasets[0].data = history.map(r => r.data.ph);
-                phChart.update();
+            for (let key in charts) {
+                charts[key].data.labels = times;
+                charts[key].data.datasets[0].data = history.map(r => r.data[key]);
+                charts[key].update();
+            }
+        }
 
-                doChart.data.labels = times;
-                doChart.data.datasets[0].data = history.map(r => r.data.do);
-                doChart.update();
+        function downloadChart(canvasId, filename) {
+            let canvas = document.getElementById(canvasId);
+            let url = canvas.toDataURL('image/png');
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+        }
 
-                tdsChart.data.labels = times;
-                tdsChart.data.datasets[0].data = history.map(r => r.data.tds);
-                tdsChart.update();
-            } catch (e) { console.error(e); }
+        async function fetchAnalysis() {
+            let area = document.getElementById('poolArea').value || 20;
+            let res = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ area: parseFloat(area) })
+            });
+            let data = await res.json();
+
+            let html = `<h4>📊 Վերլուծության Արդյունքներ</h4><ul>`;
+            data.analysis.forEach(item => html += `<li>${item}</li>`);
+            html += `</ul><h4 style="margin-top:20px;">🛠 Անհատական Խորհուրդներ</h4><ul>`;
+            data.recommendations.forEach(item => html += `<li>${item}</li>`);
+            html += `</ul>`;
+
+            document.getElementById('analysis-results').innerHTML = html;
         }
     </script>
 </body>
